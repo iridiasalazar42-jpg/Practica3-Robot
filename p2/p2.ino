@@ -42,9 +42,13 @@ int anguloActual = 90;
 
 const int VELOCIDAD = 130; // PWM (0-255) para controlar la velocidad de los motores
 
-// ====== ESTADO ROOMBA ======
+// ====== ESTADO ROOMBA Y VARIABLES COMPARTIDAS ======
 bool modoRoombaActivo = false;
 unsigned long ultimoMsUS = 0;
+
+// Estas variables evitan que el loop() y RoombaTask() choquen al leer el sensor simultáneamente
+volatile float distanciaGlobal = 0.0;
+volatile bool lecturaOkGlobal = false;
 
 void aplicarAngulo(int angulo) {
   if (angulo < 0) angulo = 0;
@@ -97,7 +101,8 @@ void MotorTask(void* arg) {
     CmdMotor nuevo;
     if (xQueueReceive(motorCmdQ, &nuevo, (TickType_t)0) == pdTRUE) {
       motores_parar_total();
-      if (nuevo.accion == DirMov::Parar || nuevo.dur_ms == 0) {
+      
+      if (nuevo.accion == DirMov::Parar) {
         enMovimiento = false;
       } else {
         switch (nuevo.accion) {
@@ -107,10 +112,17 @@ void MotorTask(void* arg) {
           case DirMov::Derecha:     mover_derecha(); break;
           default: break;
         }
-        t_fin = millis() + nuevo.dur_ms;
-        enMovimiento = true;
+        
+        if (nuevo.dur_ms > 0) {
+          t_fin = millis() + nuevo.dur_ms;
+          enMovimiento = true; 
+        } else {
+          enMovimiento = false; // Movimiento continuo sin timeout
+        }
       }
     }
+    
+    // Verificación de timeout para detener el motor
     if (enMovimiento && (int32_t)(millis() - t_fin) >= 0) {
       enMovimiento = false;
       motores_parar_total();
@@ -138,40 +150,54 @@ float leerUltrasonico(bool &ok) {
 //                 LÓGICA ROOMBA (RADAR ACTIVO)
 // ======================================================================
 void RoombaTask(void* arg) {
+  static bool roombaAvanzando = false; 
+
   for(;;) {
     if(modoRoombaActivo) {
       bool ok;
-      aplicarAngulo(90); // Mirar al frente mientras avanza
-      vTaskDelay(pdMS_TO_TICKS(150)); 
-      
       float dist = leerUltrasonico(ok);
       
+      // Actualizar globales para que Qt y OLED puedan leerlas sin usar el pin
+      distanciaGlobal = dist;
+      lecturaOkGlobal = ok;
+
       if(ok && dist < 25.0) { // OBSTÁCULO DETECTADO
-        // 1. FRENAR de emergencia
+        roombaAvanzando = false;
+
+        // 1. FRENAR (Tiempo para detener inercia y bajar consumo)
         CmdMotor stopCmd{DirMov::Parar, 0, 0};
         xQueueSend(motorCmdQ, &stopCmd, 0);
-        
-        // 2. EVASIÓN: Retroceder si está a menos de 10 cm
+        vTaskDelay(pdMS_TO_TICKS(200)); 
+
+        // 2. EVASIÓN: Retroceder si está muy cerca
         if (dist < 10.0) {
           CmdMotor backCmd{DirMov::Retroceder, 500, 0};
           xQueueSend(motorCmdQ, &backCmd, 0);
-          vTaskDelay(pdMS_TO_TICKS(600)); 
+          // Esperamos a que la reversa TERMINE por completo antes de mover el servo
+          vTaskDelay(pdMS_TO_TICKS(650)); 
         }
 
         // 3. Radar Derecho
         aplicarAngulo(30);
-        vTaskDelay(pdMS_TO_TICKS(400));
+        vTaskDelay(pdMS_TO_TICKS(500));
         float distDer = leerUltrasonico(ok);
-        if(!ok) distDer = 0;
+        if(!ok) distDer = 999.0; // Si no hay eco, el camino está libre
 
-        // 4. Radar Izquierdo
+        // 4. Radar Izquierdo (FIX DE CORRIENTE/BROWNOUT)
+        // El salto de 30° a 150° exige corriente máxima. 
+        // Hacemos una breve parada en 90° para romper el pico de consumo.
+        aplicarAngulo(90);
+        vTaskDelay(pdMS_TO_TICKS(200)); 
         aplicarAngulo(150);
         vTaskDelay(pdMS_TO_TICKS(400));
+        
         float distIzq = leerUltrasonico(ok);
-        if(!ok) distIzq = 0;
+        if(!ok) distIzq = 999.0; 
 
         // 5. Decidir hacia dónde girar
-        aplicarAngulo(90); // Regresar cuello al centro
+        aplicarAngulo(90); 
+        vTaskDelay(pdMS_TO_TICKS(300)); // Esperar que el cuello se centre antes de arrancar llantas
+        
         if(distDer > distIzq) {
           CmdMotor giroCmd{DirMov::Derecha, 600, 0}; 
           xQueueSend(motorCmdQ, &giroCmd, 0);
@@ -179,16 +205,23 @@ void RoombaTask(void* arg) {
           CmdMotor giroCmd{DirMov::Izquierda, 600, 0}; 
           xQueueSend(motorCmdQ, &giroCmd, 0);
         }
-        vTaskDelay(pdMS_TO_TICKS(700)); // Esperar a completar el giro
+        vTaskDelay(pdMS_TO_TICKS(700)); 
         
       } else {
-        // Camino libre, avanzar
-        CmdMotor fwdCmd{DirMov::Avanzar, 250, 0};
-        xQueueSend(motorCmdQ, &fwdCmd, 0);
-        vTaskDelay(pdMS_TO_TICKS(150));
+        // CAMINO LIBRE
+        if (!roombaAvanzando) {
+          aplicarAngulo(90); 
+          vTaskDelay(pdMS_TO_TICKS(200));
+          // Enviar comando continuo UNA SOLA VEZ
+          CmdMotor fwdCmd{DirMov::Avanzar, 0, 0}; 
+          xQueueSend(motorCmdQ, &fwdCmd, 0);
+          roombaAvanzando = true;
+        }
+        vTaskDelay(pdMS_TO_TICKS(100)); 
       }
     } else {
-      vTaskDelay(pdMS_TO_TICKS(100)); // Reposo si la Roomba está apagada
+      roombaAvanzando = false;
+      vTaskDelay(pdMS_TO_TICKS(100));
     }
   }
 }
@@ -202,28 +235,26 @@ void onEventoWS(uint8_t idCliente, WStype_t tipo, uint8_t * payload, size_t long
     if (deserializeJson(doc, payload, longitud)) return;
     
     if (doc["tipo"] == "mover" && !modoRoombaActivo) { 
-      // ... (código existente de mover) ...
       DirMov a = DirMov::Parar;
       if (doc["accion"] == "avanzar") a = DirMov::Avanzar;
       else if (doc["accion"] == "retroceder") a = DirMov::Retroceder;
       else if (doc["accion"] == "izquierda") a = DirMov::Izquierda;
       else if (doc["accion"] == "derecha") a = DirMov::Derecha;
-      uint32_t ms_cmd = doc.containsKey("ms") ? doc["ms"].as<uint32_t>() : 0;
+      
+      uint32_t ms_cmd = doc["ms"] | 0;
       CmdMotor cmd{ a, ms_cmd, 0 };
       xQueueSend(motorCmdQ, &cmd, 0);
     } 
-    // ---> NUEVO: COMANDO MANUAL PARA EL SERVO <---
     else if (doc["tipo"] == "servo" && !modoRoombaActivo) {
       int anguloDeseado = doc["angulo"];
       aplicarAngulo(anguloDeseado);
     }
-    // ---------------------------------------------
     else if (doc["tipo"] == "roomba") {
       modoRoombaActivo = doc["activo"];
       if(!modoRoombaActivo) { 
         CmdMotor cmd{DirMov::Parar, 0, 0};
         xQueueSend(motorCmdQ, &cmd, 0);
-        aplicarAngulo(90); // Regresa a 90° automáticamente al apagar Roomba
+        aplicarAngulo(90); 
       }
     }
   }
@@ -237,7 +268,7 @@ void setup() {
   ledcAttach(PIN_SERVO, 50, 14);
   aplicarAngulo(90);
   
-  // Iniciar OLED I2C (usando GPIO 8 para SDA y 9 para SCL)
+  // Iniciar OLED I2C (SDA=8, SCL=9)
   Wire.begin(8, 9);
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
     Serial.println(F("Fallo al iniciar OLED"));
@@ -277,26 +308,34 @@ void setup() {
 void loop() {
   servidorWS.loop();
   
-  // Enviar telemetría a Qt (Gráfica de Distancia) y actualizar OLED
   unsigned long ahora = millis();
   if (ahora - ultimoMsUS >= 100) {
     ultimoMsUS = ahora;
     bool ok_us = false;
-    float dist = leerUltrasonico(ok_us);
+    float dist = 0.0;
+    
+    // Leer sensor solo si Roomba NO está activo
+    if (!modoRoombaActivo) {
+        dist = leerUltrasonico(ok_us);
+        distanciaGlobal = dist;
+        lecturaOkGlobal = ok_us;
+    } else {
+        dist = distanciaGlobal;
+        ok_us = lecturaOkGlobal;
+    }
     
     // --- ACTUALIZACIÓN DE PANTALLA OLED ---
     display.clearDisplay();
     display.setCursor(10, 25);
     
     if (ok_us) {
-      display.print(dist, 1); // Imprime con 1 decimal
+      display.print(dist, 1); 
       display.print(" cm");
       
-      // CAMBIO DE COLOR (INVERSIÓN) SI ESTÁ A MENOS DE 20 CM
       if (dist < 20.0) {
-        display.invertDisplay(true); // Peligro
+        display.invertDisplay(true); 
       } else {
-        display.invertDisplay(false); // Seguro
+        display.invertDisplay(false); 
       }
     } else {
       display.print("Fuera de");
