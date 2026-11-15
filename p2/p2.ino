@@ -17,8 +17,8 @@
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 // ====== CONFIG WiFi ======
-const char* ssid     = "IRIDIA'S PHONE";
-const char* password = "tumamaxd";
+const char* ssid     = "wifi";
+const char* password = "your_password";
 WebSocketsServer servidorWS(81);
 
 // ====== PINES ======
