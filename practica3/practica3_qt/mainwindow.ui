@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>400</width>
+    <height>750</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Robot Android</string>
+  </property>
+  <property name="styleSheet">
+   <string>QMainWindow { background-color: #000000; color: #ffffff }</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="verticalLayoutMain">
+
+    <!-- BARRA SUPERIOR: CONEXIÓN -->
+    <item>
+     <layout class="QHBoxLayout" name="layoutTop">
+      <item>
+       <widget class="QLineEdit" name="lineEditIp">
+        <property name="text">
+         <string>10.163.96.221</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="botonConectar">
+        <property name="text">
+         <string>Conectar</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="checkRoomba">
+        <property name="text">
+         <string>Roomba</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </item>
+
+    <!-- DATOS DEL ALUMNO Y DISTANCIA -->
+    <item>
+     <widget class="QLabel" name="label">
+      <property name="text">
+       <string>Iridia G. Salazar Esmerio - 223823764</string>
+      </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QLabel" name="etiquetaDistancia">
+      <property name="font">
+       <font>
+        <pointsize>28</pointsize>
+        <bold>true</bold>
+       </font>
+      </property>
+      <property name="text">
+       <string>0.0 cm</string>
+      </property>
+      <property name="alignment">
+       <set>Qt::AlignCenter</set>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QProgressBar" name="barraProximidad">
+      <property name="value">
+       <number>0</number>
+      </property>
+      <property name="textVisible">
+       <bool>false</bool>
+      </property>
+     </widget>
+    </item>
+
+    <!-- GRÁFICA (Se expandirá automáticamente) -->
+    <item>
+     <widget class="QChartView" name="graficaDistancia" native="true">
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+     </widget>
+    </item>
+
+    <!-- CAJA DE CONTROLES (QGroupBox) -->
+    <item>
+     <widget class="QGroupBox" name="groupBoxControls">
+      <property name="title">
+       <string>Panel de Control Robot</string>
+      </property>
+      <property name="styleSheet">
+       <string>QGroupBox { font-weight: bold; border: 2px solid #aaa; border-radius: 8px; margin-top: 10px; } QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 3px; }</string>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayoutControls">
+
+       <!-- SLIDER DEL SERVO -->
+       <item>
+        <widget class="QSlider" name="sliderServo">
+         <property name="maximum">
+          <number>180</number>
+         </property>
+         <property name="value">
+          <number>90</number>
+         </property>
+         <property name="orientation">
+          <enum>Qt::Horizontal</enum>
+         </property>
+        </widget>
+       </item>
+
+       <!-- D-PAD DE BOTONES (Grid Layout) -->
+       <item>
+        <layout class="QGridLayout" name="gridLayoutBotones">
+         <item row="0" column="1">
+          <widget class="QPushButton" name="pushButtonW">
+           <property name="minimumSize">
+            <size><width>0</width><height>60</height></size>
+           </property>
+           <property name="text"><string>▲</string></property>
+          </widget>
+         </item>
+         <item row="1" column="0">
+          <widget class="QPushButton" name="pushButtonA">
+           <property name="minimumSize">
+            <size><width>0</width><height>60</height></size>
+           </property>
+           <property name="text"><string>◀</string></property>
+          </widget>
+         </item>
+         <item row="1" column="1">
+          <widget class="QPushButton" name="pushButtonSpace">
+           <property name="minimumSize">
+            <size><width>0</width><height>60</height></size>
+           </property>
+           <property name="styleSheet">
+            <string>background-color: #ff4c4c; color: white; font-weight: bold; border-radius: 5px;</string>
+           </property>
+           <property name="text"><string>STOP</string></property>
+          </widget>
+         </item>
+         <item row="1" column="2">
+          <widget class="QPushButton" name="pushButtonD">
+           <property name="minimumSize">
+            <size><width>0</width><height>60</height></size>
+           </property>
+           <property name="text"><string>▶</string></property>
+          </widget>
+         </item>
+         <item row="2" column="1">
+          <widget class="QPushButton" name="pushButtonS">
+           <property name="minimumSize">
+            <size><width>0</width><height>60</height></size>
+           </property>
+           <property name="text"><string>▼</string></property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+
+      </layout>
+     </widget>
+    </item>
+
+   </layout>
+  </widget>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>QChartView</class>
+   <extends>QWidget</extends>
+   <header>qchartview.h</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>

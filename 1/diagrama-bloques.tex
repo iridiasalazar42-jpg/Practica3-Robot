@@ -1,0 +1,106 @@
+\documentclass[border=12pt]{standalone}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-noshorthands]{babel}
+\usepackage{tikz}
+\usetikzlibrary{positioning, shapes.geometric, shapes.symbols, arrows.meta, calc, fit, backgrounds}
+
+% ---- Paleta ----
+\definecolor{colPC}{RGB}{33,102,172}      % azul PC / Qt
+\definecolor{colPCfill}{RGB}{222,235,247}
+\definecolor{colESP}{RGB}{35,139,69}      % verde ESP32
+\definecolor{colESPfill}{RGB}{224,243,219}
+\definecolor{colNet}{RGB}{110,110,110}    % gris red
+\definecolor{colNetfill}{RGB}{235,235,235}
+\definecolor{colHW}{RGB}{217,95,14}       % naranja hardware
+\definecolor{colHWfill}{RGB}{254,230,206}
+
+\newcommand{\titulo}{\bfseries}
+
+\begin{document}
+\begin{tikzpicture}[
+  font=\sffamily,
+  >={Latex[length=3mm]},
+  bloque/.style={
+    rectangle, rounded corners=6pt, draw, line width=1pt,
+    align=center, text width=42mm, minimum height=26mm,
+    inner sep=6pt
+  },
+  hw/.style={
+    rectangle, rounded corners=4pt, draw=colHW, line width=0.9pt,
+    fill=colHWfill, align=center, text width=40mm, minimum height=10mm,
+    inner sep=4pt, font=\sffamily\small
+  },
+  flecha/.style={->, line width=1pt},
+  etiqueta/.style={font=\sffamily\small, fill=white, inner sep=2pt}
+]
+
+% ===== Bloques principales (fila horizontal) =====
+\node[bloque, draw=colPC, fill=colPCfill] (pc) {
+  {\titulo PC — App Qt}\\[2pt]
+  {\bfseries Espejo del botón}\\[4pt]
+  {\small Sólo ESCUCHA\\ el WebSocket\\ (sin polling)\\ Muestra ENCENDIDO / APAGADO\\ reflejando el LED en tiempo real}
+};
+
+\node[rectangle, rounded corners=10pt, draw=colNet, fill=colNetfill,
+      line width=1pt, align=center, text width=40mm, minimum height=30mm,
+      inner sep=6pt, right=34mm of pc] (red) {
+  \\[7mm]
+  {\titulo Red WiFi}\\[2pt]
+  {\small SSID\\ \texttt{GWN571D04}}
+};
+% ---- Icono WiFi (arcos) dentro del bloque de red ----
+\begin{scope}[shift={($(red.north)+(0,-7mm)$)}]
+  \fill[colNet] (0,0) circle (0.9mm);
+  \draw[colNet, line width=0.9pt] (-3mm,3mm) arc (140:40:4mm);
+  \draw[colNet, line width=0.9pt] (-5mm,5mm) arc (140:40:6.6mm);
+\end{scope}
+
+\node[bloque, draw=colESP, fill=colESPfill, right=34mm of red, minimum height=30mm] (esp) {
+  {\titulo ESP32-S3 (Arduino)}\\[4pt]
+  {\small Servidor WebSocket\\ + botón con retención\\ (antirrebote)}
+};
+
+% ===== Enlace PC <-> Red <-> ESP32 (WebSocket bidireccional, rotulado) =====
+% Canal WebSocket (PC <-> ESP32): mismo enlace en ambos sentidos
+\draw[flecha, colPC] ([yshift=6mm]pc.east) -- ([yshift=6mm]red.west)
+   node[etiqueta, midway, above, align=center]
+     {WebSocket\\ \texttt{ws://<IP>:81}\\ (mensajes JSON)};
+\draw[flecha, colPC] ([yshift=6mm]red.east) -- ([yshift=6mm]esp.west);
+
+% Mensajes JSON del ESP32 hacia la App Qt (ESP32 -> Red -> PC)
+\draw[flecha, colESP] ([yshift=-6mm]esp.west) -- ([yshift=-6mm]red.east)
+   node[etiqueta, midway, below, align=center]
+     {JSON al pulsar:\\ \texttt{\{"tipo":"estado\_led",}\\ \texttt{"encendido":true|false\}}\\
+      al conectar: \texttt{\{"tipo":"saludo"\}}};
+\draw[flecha, colESP] ([yshift=-6mm]red.west) -- ([yshift=-6mm]pc.east);
+
+% ===== Hardware colgando del ESP32 =====
+\node[hw, below=16mm of esp] (led) {LED GPIO4 + R\,330\,$\Omega$};
+\node[hw, below=4mm of led] (rgb) {LED RGB GPIO48};
+\node[hw, above=16mm of esp] (btn) {Pulsador GPIO15\\ (retención)};
+
+% Pulsador -> ESP32
+\draw[flecha, colHW] (btn.south) -- (esp.north)
+   node[etiqueta, midway, right] {pulsación $\rightarrow$ alterna};
+
+% ESP32 -> LED
+\draw[flecha, colHW] (esp.south) -- (led.north)
+   node[etiqueta, midway, right] {enciende / apaga};
+
+% ESP32 -> LED RGB (indicador)
+\draw[flecha, colHW] (esp.south) to[out=-90,in=90] ([xshift=-14mm]rgb.north);
+
+% ===== Nota al pie =====
+\node[align=left, font=\sffamily\small\itshape, text width=150mm,
+      below=6mm of rgb, anchor=north] (nota)
+  {Nota: mismo protocolo que la Práctica 4 y el TC4 (WebSocket + JSON con campo \texttt{tipo}).};
+
+% ===== Recuadro de agrupación del hardware =====
+\begin{scope}[on background layer]
+  \node[draw=colHW, dashed, rounded corners, inner sep=6mm,
+        fit=(btn)(led)(rgb), label={[colHW,font=\sffamily\bfseries\small]above right:Hardware}] {};
+\end{scope}
+
+\end{tikzpicture}
+\end{document}
